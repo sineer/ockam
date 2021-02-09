@@ -19,7 +19,6 @@ defmodule Ockam.Transport.TCPAddress.Tests do
       address = %TCPAddress{ip: {127, 0, 0, 1}, port: 4000}
 
       serialized = Ockam.Serializable.serialize(address)
-      IO.inspect(serialized, label: "serialized")
       deserialized = TCPAddress.deserialize(serialized)
 
       assert address === deserialized
