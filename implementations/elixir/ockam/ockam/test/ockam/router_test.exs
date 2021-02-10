@@ -15,9 +15,16 @@ defmodule Ockam.Router.Tests do
 
   alias Ockam.Router.Tests.Printer
   alias Ockam.Transport.UDPAddress
+  alias Ockam.Transport.TCPAddress
+
+  setup_all do
+    {:ok, "printer"} = Printer.create(address: "printer")
+    printer = Ockam.Node.whereis("printer")
+    [printer: printer]
+  end
 
   describe "Ockam.Router" do
-    test "Simple UDP Test" do
+    test "Simple UDP Test", %{printer: printer} do
       assert {:ok, _address_a} =
                Ockam.Transport.UDP.create_listener(port: 3000, route_outgoing: true)
 
@@ -33,8 +40,6 @@ defmodule Ockam.Router.Tests do
         payload: "hello"
       }
 
-      {:ok, "printer"} = Printer.create(address: "printer")
-      printer = Ockam.Node.whereis("printer")
       :erlang.trace(printer, true, [:receive])
 
       Ockam.Router.route(message)
@@ -49,6 +54,43 @@ defmodule Ockam.Router.Tests do
           {2, <<2, 7, 0, 127, 0, 0, 1, 160, 15>>}
         ]
       }
+
+      GenServer.stop({:via, Ockam.Node.process_registry(), "printer"})
+    end
+
+    @tag :skip
+    test "Simple TCP Test", %{printer: printer} do
+      assert {:ok, _address_a} =
+               Ockam.Transport.TCP.create_listener(port: 3000, route_outgoing: true)
+
+      assert {:ok, _address_b} =
+               Ockam.Transport.TCP.create_listener(port: 4000, route_outgoing: true)
+
+      message = %{
+        onward_route: [
+          %TCPAddress{ip: {127, 0, 0, 1}, port: 3000},
+          %TCPAddress{ip: {127, 0, 0, 1}, port: 4000},
+          "printer"
+        ],
+        payload: "hello"
+      }
+
+      :erlang.trace(printer, true, [:receive])
+
+      Ockam.Router.route(message)
+
+      assert_receive {:trace, ^printer, :receive, message}
+      assert message == %{
+        onward_route: [{0, <<0, 7, 112, 114, 105, 110, 116, 101, 114>>}],
+        payload: <<0, 7, 0, 5, 104, 101, 108, 108, 111>>,
+        return_route: [
+          # TODO: this does not look correct to me
+          {2, <<2, 7, 0, 127, 0, 0, 1, 160, 15>>},
+          {2, <<2, 7, 0, 127, 0, 0, 1, 160, 15>>}
+        ]
+      }
+
+      GenServer.stop({:via, Ockam.Node.process_registry(), "printer"})
     end
   end
 end
