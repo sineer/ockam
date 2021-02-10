@@ -4,6 +4,8 @@ if Code.ensure_loaded?(:ranch) do
 
     use Ockam.Worker
 
+    @tcp 1
+
     @doc false
     @impl true
     def setup(options, state) do
@@ -13,6 +15,8 @@ if Code.ensure_loaded?(:ranch) do
       port = Keyword.get_lazy(options, :port, &default_port/0)
       state = Map.put(state, :port, port)
 
+      route_outgoing = Keyword.get(options, :route_outgoing, false)
+
       ref = make_ref()
       transport = :ranch_tcp
       transport_options = [port: port]
@@ -20,7 +24,8 @@ if Code.ensure_loaded?(:ranch) do
       protocol_options = []
 
       with {:ok, _apps} <- Application.ensure_all_started(:ranch),
-           :ok <- start_listener(ref, transport, transport_options, protocol, protocol_options) do
+           :ok <- start_listener(ref, transport, transport_options, protocol, protocol_options),
+           :ok <- setup_routed_message_handler(route_outgoing, state.address) do
         {:ok, state}
       end
     end
@@ -33,6 +38,21 @@ if Code.ensure_loaded?(:ranch) do
         {:ok, _child, _info} -> :ok
         {:error, reason} -> {:error, {:could_not_start_ranch_listener, reason}}
       end
+    end
+
+    defp setup_routed_message_handler(true, listener) do
+      handler = fn message -> handle_routed_message(listener, message) end
+
+      with :ok <- Router.set_message_handler(@tcp, handler),
+           :ok <- Router.set_message_handler(Ockam.Transport.TCPAddress, handler) do
+        :ok
+      end
+    end
+
+    defp setup_routed_message_handler(_something_else, _listener), do: :ok
+
+    defp handle_routed_message(listener, message) do
+      Node.send(listener, message)
     end
 
     defp default_ip, do: {127, 0, 0, 1}
