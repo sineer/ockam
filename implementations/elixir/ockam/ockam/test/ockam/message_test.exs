@@ -23,6 +23,16 @@ defmodule Ockam.Message.Tests do
       assert [] === Message.onward_route(%{onward_route: 100})
     end
 
+    test "onward_route/1 does what I expect for UDP" do
+      message = %{
+        onward_route: [
+          %Ockam.Transport.UDPAddress{ip: {127, 0, 0, 1}, port: 3000}
+        ],
+        payload: "hello"
+      }
+      assert [%Ockam.Transport.UDPAddress{ip: {127, 0, 0, 1}, port: 3000}] == Message.onward_route(message)
+    end
+
     test "onward_route/1 does what I expect for TCP" do
       message = %{
         onward_route: [
@@ -30,12 +40,22 @@ defmodule Ockam.Message.Tests do
         ],
         payload: "hello"
       }
-      assert [] == Message.onward_route(message)
+      assert [%Ockam.Transport.TCPAddress{ip: {127, 0, 0, 1}, port: 3000}] == Message.onward_route(message)
+    end
+
+    test "return_route/1 does what I expect for UDP" do
+      message = %{
+        return_route: [
+          %Ockam.Transport.UDPAddress{ip: {127, 0, 0, 1}, port: 3000}
+        ],
+        payload: "hello"
+      }
+      assert [%Ockam.Transport.UDPAddress{ip: {127, 0, 0, 1}, port: 3000}] = Message.return_route(message)
     end
 
     test "return_route/1 does what I expect for TCP" do
       message = %{
-        onward_route: [
+        return_route: [
           %Ockam.Transport.TCPAddress{ip: {127, 0, 0, 1}, port: 3000}
         ],
         payload: "hello"
