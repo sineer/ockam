@@ -22,5 +22,15 @@ defmodule Ockam.Message.Tests do
     test "onward_route key of map is not used if it does not have a list value" do
       assert [] === Message.onward_route(%{onward_route: 100})
     end
+
+    test "onward_route does what I expect for TCP" do
+      message = %{
+        onward_route: [
+          %Ockam.Transport.TCPAddress{ip: {127, 0, 0, 1}, port: 3000}
+        ],
+        payload: "hello"
+      }
+      assert [] == Message.onward_route(message)
+    end
   end
 end
