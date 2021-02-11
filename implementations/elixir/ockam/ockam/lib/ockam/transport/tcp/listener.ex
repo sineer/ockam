@@ -3,8 +3,13 @@ if Code.ensure_loaded?(:ranch) do
     @moduledoc false
 
     use Ockam.Worker
+    alias Ockam.Transport.TCPAddress
+    alias Ockam.Message
+    alias Ockam.Wire
 
     @tcp 1
+    # TODO: modify this for tcp
+    @wire_encoder_decoder Ockam.Wire.Binary.V1
 
     @doc false
     @impl true
@@ -55,6 +60,68 @@ if Code.ensure_loaded?(:ranch) do
       Node.send(listener, message)
     end
 
+    @impl true
+    def handle_message({:tcp, _socket, _from_ip, _from_port, _packet} = tcp_message, state) do
+      send_over_tcp(tcp_message, state.address)
+      {:ok, state}
+    end
+
+    def handle_message(message, state) do
+      encode_and_send_over_tcp(message, state)
+      {:ok, state}
+    end
+
+    defp encode_and_send_over_tcp(message, state) do
+      message = create_outgoing_message(message)
+
+      with {:ok, destination, message} <- pick_destination_and_set_onward_route(message, state.address),
+           {:ok, message} <- set_return_route(message, state.address),
+           {:ok, encoded_message} <- Wire.encode(@wire_encoder_decoder, message),
+           :ok <- send_over_tcp(encoded_message, destination) do
+        :ok
+      end
+    end
+
+    defp send_over_tcp(_message,address) do
+      IO.inspect(address, label: "send_over_tcp")
+    end
+
+
+    defp create_outgoing_message(message) do
+      %{
+        onward_route: Message.onward_route(message),
+        return_route: Message.return_route(message),
+        payload: Message.payload(message)
+      }
+    end
+
+    defp pick_destination_and_set_onward_route(message, address) do
+      destination_and_onward_route =
+        message
+        |> Message.onward_route()
+        |> Enum.drop_while(fn a -> a === address end)
+        |> List.pop_at(0)
+
+      case destination_and_onward_route do
+        {nil, []} -> {:error, :no_destination}
+        {%TCPAddress{} = destination, r} -> {:ok, destination, %{message | onward_route: r}}
+        {{@tcp, address}, onward_route} -> deserialize_address(message, address, onward_route)
+        {destination, _onward_route} -> {:error, {:invalid_destination, destination}}
+      end
+    end
+
+    defp deserialize_address(message, address, onward_route) do
+      case TCPAddress.deserialize(address) do
+        {:error, error} -> {:error, error}
+        destination -> {:ok, destination, %{message | onward_route: onward_route}}
+      end
+    end
+
+    defp set_return_route(%{return_route: return_route} = message, address) do
+      {:ok, %{message | return_route: [address | return_route]}}
+    end
+
+
     defp default_ip, do: {127, 0, 0, 1}
     defp default_port, do: 4000
   end
@@ -68,7 +135,7 @@ if Code.ensure_loaded?(:ranch) do
     end
 
     def init(ref, socket, transport) do
-      :ok = :ranch.handshake(ref)
+      {:ok, _} = :ranch.handshake(ref)
       :ok = transport.setopts(socket, [{:active, true}, {:nodelay, true}, {:reuseaddr, true}])
       :gen_server.enter_loop(__MODULE__, [], %{socket: socket, transport: transport})
     end
