@@ -84,7 +84,7 @@ if Code.ensure_loaded?(:ranch) do
     end
 
     defp prepend_varint_length(message) do
-      bytesize = byte_size(message)
+      bytesize = IO.iodata_length(message)
       Ockam.Wire.Binary.VarInt.encode(bytesize)
     end
 
@@ -169,7 +169,7 @@ if Code.ensure_loaded?(:ranch) do
     end
 
     defp check_length(data, size) do
-      case byte_size(data) == size do
+      case IO.iodata_length(data) == size do
         true -> :ok
         false -> :not_enough_data
       end
