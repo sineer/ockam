@@ -85,11 +85,15 @@ if Code.ensure_loaded?(:ranch) do
 
     defp prepend_varint_length(message) do
       bytesize = IO.iodata_length(message)
-      Ockam.Wire.Binary.VarInt.encode(bytesize)
+      case Ockam.Wire.Binary.VarInt.encode(bytesize) do
+        {:error, reason} -> {:error, reason}
+        varint_length -> {:ok, [varint_length, message]}
+      end
     end
 
     defp send_over_tcp(_message,address) do
       IO.inspect(address, label: "send_over_tcp")
+      :ok
     end
 
 
